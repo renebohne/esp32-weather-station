@@ -22,10 +22,69 @@ uint32_t delayMS;
 SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
 
 
+//DUST SENSOR stuff
+#define        COV_RATIO                       0.2            //ug/mmm / mv
+#define        NO_DUST_VOLTAGE                 400            //mv
+#define        SYS_VOLTAGE                     3300
+
+/*
+I/O define
+*/
+const int iled = 23;                                            //drive the led of sensor
+const int vout = 36;                                            //analog input on pin VP (gpio 36)
+
+/*
+variable
+*/
+float density, voltage;
+int   adcvalue;
+
+/*
+private function
+*/
+int Filter(int m)
+{
+  static int flag_first = 0, _buff[10], sum;
+  const int _buff_max = 10;
+  int i;
+
+  if(flag_first == 0)
+  {
+    flag_first = 1;
+
+    for(i = 0, sum = 0; i < _buff_max; i++)
+    {
+      _buff[i] = m;
+      sum += _buff[i];
+    }
+    return m;
+  }
+  else
+  {
+    sum -= _buff[0];
+    for(i = 0; i < (_buff_max - 1); i++)
+    {
+      _buff[i] = _buff[i + 1];
+    }
+    _buff[9] = m;
+    sum += _buff[9];
+
+    i = sum / 10.0;
+    return i;
+  }
+}
+
+
+
 void setup() {
   Serial.begin(115200);
   // Initialize device.
   dht.begin();
+
+  pinMode(iled, OUTPUT);
+  digitalWrite(iled, LOW);                                     //iled default closed
+
+
   // Initialising the UI will init the display too.
   display.init();
   display.flipScreenVertically();
@@ -64,9 +123,60 @@ void setup() {
   delayMS = sensor.min_delay / 1000;
 }
 
+void readDustSensor(void)
+{
+  /*
+  get adcvalue
+  */
+  digitalWrite(iled, HIGH);
+  delayMicroseconds(280);
+  adcvalue = analogRead(vout);
+  digitalWrite(iled, LOW);
+
+  adcvalue = Filter(adcvalue);
+
+  /*
+  covert voltage (mv)
+  */
+  //voltage = (SYS_VOLTAGE / 1024.0) * adcvalue * 11;
+  voltage = (SYS_VOLTAGE / 4096.0) * adcvalue *11;
+
+
+  /*
+  voltage to density
+  */
+  if(voltage >= NO_DUST_VOLTAGE)
+  {
+    voltage -= NO_DUST_VOLTAGE;
+
+    density = voltage * COV_RATIO;
+  }
+  else
+    density = 0;
+
+  /*
+  display the result
+  */
+  Serial.print("The current dust concentration is: ");
+  Serial.print(density);
+  Serial.print(" ug/m3\n");
+
+
+}
+
 void loop() {
   // Delay between measurements.
-  delay(delayMS);
+  if(delayMS <1000)
+  {
+    delay(1000);
+  }
+  else
+  {
+    delay(delayMS);
+  }
+
+  readDustSensor();
+
   display.clear();
   // Get temperature event and print its value.
   sensors_event_t event;
@@ -96,5 +206,12 @@ void loop() {
     display.drawString(10, 20, String("Humidity: "));
     display.drawString(60, 20, String(event.relative_humidity));
   }
+
+  display.drawString(10, 30, String("Dust: "));
+  display.drawString(60, 30, String(density));
+
+  display.drawString(10, 40, String("Voltage: "));
+  display.drawString(60, 40, String(voltage/1000.0));
+
   display.display();
 }
