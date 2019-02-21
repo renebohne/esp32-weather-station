@@ -34,6 +34,7 @@ const char* password = "<YOUR_WIFI_PASSWORD>";
 const char* mqtt_server = "<IP_OF_YOUR_MQTT_BROKER>";
 
 
+
 //DUST SENSOR stuff
 #define        COV_RATIO                       0.2            //ug/mmm / mv
 #define        NO_DUST_VOLTAGE                 0            //mv 400
@@ -309,6 +310,12 @@ client.loop();
     display.drawString(10, 10, String("Temp: "));
     display.drawString(60, 10, str_temperature);
 
+    //publish to mqtt
+    str_temperature.toCharArray(msg, 50);
+    Serial.print("Publish temperature message: ");
+    Serial.println(msg);
+    client.publish("temperature", msg);
+
   }
   // Get humidity event and print its value.
   dht.humidity().getEvent(&event);
@@ -323,6 +330,11 @@ client.loop();
 
     display.drawString(10, 20, String("Humidity: "));
     display.drawString(60, 20, str_humidity);
+    //publish to mqtt
+    str_humidity.toCharArray(msg, 50);
+    Serial.print("Publish humidity message: ");
+    Serial.println(msg);
+    client.publish("humidity", msg);
   }
 
   display.drawString(10, 30, String("Dust: "));
@@ -337,10 +349,9 @@ client.loop();
   display.display();
 
   //publish to mqtt
-  sdensity.toCharArray(msg, 50);
-  Serial.print("Publish message: ");
+  str_density.toCharArray(msg, 50);
+  Serial.print("Publish dust message: ");
   Serial.println(msg);
-
   client.publish("dust", msg);
 
 
