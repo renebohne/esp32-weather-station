@@ -24,8 +24,8 @@ SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
 
 //DUST SENSOR stuff
 #define        COV_RATIO                       0.2            //ug/mmm / mv
-#define        NO_DUST_VOLTAGE                 400            //mv
-#define        SYS_VOLTAGE                     3300
+#define        NO_DUST_VOLTAGE                 0            //mv 400
+#define        SYS_VOLTAGE                     1000
 
 /*
 I/O define
@@ -85,6 +85,12 @@ void setup() {
   digitalWrite(iled, LOW);                                     //iled default closed
 
 
+
+	analogReadResolution(10);
+	analogSetAttenuation(ADC_0db);
+
+
+
   // Initialising the UI will init the display too.
   display.init();
   display.flipScreenVertically();
@@ -130,16 +136,17 @@ void readDustSensor(void)
   */
   digitalWrite(iled, HIGH);
   delayMicroseconds(280);
+
   adcvalue = analogRead(vout);
   digitalWrite(iled, LOW);
 
-  adcvalue = Filter(adcvalue);
+  //adcvalue = Filter(adcvalue);
 
   /*
   covert voltage (mv)
   */
   //voltage = (SYS_VOLTAGE / 1024.0) * adcvalue * 11;
-  voltage = (SYS_VOLTAGE / 4096.0) * adcvalue *11;
+  voltage = (SYS_VOLTAGE / 1024.0) * adcvalue *11;
 
 
   /*
@@ -211,7 +218,7 @@ void loop() {
   display.drawString(60, 30, String(density));
 
   display.drawString(10, 40, String("Voltage: "));
-  display.drawString(60, 40, String(voltage/1000.0));
+  display.drawString(60, 40, String(voltage));
 
   display.display();
 }
