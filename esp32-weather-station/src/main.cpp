@@ -31,7 +31,7 @@ SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
 I/O define
 */
 const int iled = 23;                                            //drive the led of sensor
-const int vout = 36;                                            //analog input on pin VP (gpio 36)
+const int vout = 34;                                            //analog input pin
 
 /*
 variable
@@ -145,7 +145,6 @@ void readDustSensor(void)
   /*
   covert voltage (mv)
   */
-  //voltage = (SYS_VOLTAGE / 1024.0) * adcvalue * 11;
   voltage = (SYS_VOLTAGE / 1024.0) * adcvalue *11;
 
 
@@ -219,6 +218,9 @@ void loop() {
 
   display.drawString(10, 40, String("Voltage: "));
   display.drawString(60, 40, String(voltage));
+
+  //display.drawString(10, 50, String("Hall: "));
+  //display.drawString(60, 50, String(hallRead()));
 
   display.display();
 }
