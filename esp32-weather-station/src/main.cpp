@@ -5,6 +5,9 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
+#include <WiFi.h>
+#include <PubSubClient.h>
+
 #define DHTPIN 18
 #define DHTTYPE    DHT22     // DHT 22 (AM2302)
 
@@ -20,6 +23,15 @@ uint32_t delayMS;
 #define OLED_SCL 4
 
 SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
+
+
+
+
+// Update these with values suitable for your network.
+
+const char* ssid = "<YOUR_SSID>";
+const char* password = "<YOUR_WIFI_PASSWORD>";
+const char* mqtt_server = "<IP_OF_YOUR_MQTT_BROKER>";
 
 
 //DUST SENSOR stuff
@@ -75,6 +87,85 @@ int Filter(int m)
 }
 
 
+//MQTT STUFF
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+long lastMsg = 0;
+char msg[50];
+int value = 0;
+
+void setup_wifi() {
+
+  delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  randomSeed(micros());
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  display.drawString(10, 50, String("IP: "));
+  display.drawString(60, 50, String(WiFi.localIP()));
+
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    //digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on
+
+  } else {
+    //digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off
+  }
+
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a random client ID
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("outTopic", "hello world");
+      // ... and resubscribe
+      client.subscribe("inTopic");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -93,15 +184,21 @@ void setup() {
 
   // Initialising the UI will init the display too.
   display.init();
-  display.flipScreenVertically();
+  //display.flipScreenVertically();
   display.setFont(ArialMT_Plain_10);
 
   Serial.println(F("esp32 Weather Station"));
 
+
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.drawString(10, 10, String("esp32 Weather Station"));
+  display.drawString(10, 20, String("connecting wifi..."));
   display.display();
+
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
 
   // Print temperature sensor details.
   sensor_t sensor;
@@ -171,6 +268,13 @@ void readDustSensor(void)
 }
 
 void loop() {
+  if (!client.connected()) {
+  reconnect();
+}
+client.loop();
+
+
+
   // Delay between measurements.
   if(delayMS <1000)
   {
@@ -183,6 +287,12 @@ void loop() {
 
   readDustSensor();
 
+  String str_density = String(density);
+
+
+
+
+
   display.clear();
   // Get temperature event and print its value.
   sensors_event_t event;
@@ -191,12 +301,13 @@ void loop() {
     Serial.println(F("Error reading temperature!"));
   }
   else {
+    String str_temperature = String(event.temperature);
     Serial.print(F("Temperature: "));
-    Serial.print(event.temperature);
+    Serial.print(str_temperature);
     Serial.println(F("°C"));
 
     display.drawString(10, 10, String("Temp: "));
-    display.drawString(60, 10, String(event.temperature));
+    display.drawString(60, 10, str_temperature);
 
   }
   // Get humidity event and print its value.
@@ -205,12 +316,13 @@ void loop() {
     Serial.println(F("Error reading humidity!"));
   }
   else {
+    String str_humidity = String(event.relative_humidity);
     Serial.print(F("Humidity: "));
-    Serial.print(event.relative_humidity);
+    Serial.print(str_humidity);
     Serial.println(F("%"));
 
     display.drawString(10, 20, String("Humidity: "));
-    display.drawString(60, 20, String(event.relative_humidity));
+    display.drawString(60, 20, str_humidity);
   }
 
   display.drawString(10, 30, String("Dust: "));
@@ -223,4 +335,14 @@ void loop() {
   //display.drawString(60, 50, String(hallRead()));
 
   display.display();
+
+  //publish to mqtt
+  sdensity.toCharArray(msg, 50);
+  Serial.print("Publish message: ");
+  Serial.println(msg);
+
+  //client.publish("dust", msg);
+
+
+
 }
