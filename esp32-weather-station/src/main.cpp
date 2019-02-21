@@ -341,7 +341,7 @@ client.loop();
   Serial.print("Publish message: ");
   Serial.println(msg);
 
-  //client.publish("dust", msg);
+  client.publish("dust", msg);
 
 
 
