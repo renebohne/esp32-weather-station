@@ -36,17 +36,13 @@ SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
 Adafruit_ADS1115 ads1115(0x48);
 
 
-
-//const char* ssid = "Telefonica NEXT Guest";
-//const char* password = "geenyguest";
-
-const char* ssid = "galway";
-const char* password = "19781979200419781979200412";
+const char* ssid = "<YOUR_SSID>";
+const char* password = "<YOUR_WIFI_PASSWORD>";
 
 const char* mqtt_server = "mqtt.tingg.io";
 
-const char* thing_id = "d0444ea3-76f3-498e-b22d-06ae33651db2";
-const char*  key = "xi2i3lm8dbyd4ev8rds4st35zht56t1g";
+const char* thing_id = "<YOUR-TINGG-THINGID>";
+const char*  key = "<YOUR-TINGG-THINGKEY>";
 const char* username = "thing";
 
 
