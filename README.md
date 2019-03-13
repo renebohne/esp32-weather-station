@@ -4,10 +4,11 @@ esp32 with DHT22 and GP2Y1010AU0F
 
 board: https://www.amazon.de/Diymore-Wireless-Bluetooth-Batterie-Entwicklung/dp/B077D7PVFC
 
-
 Dust Sensor: https://www.waveshare.com/wiki/Dust_Sensor
 
-From the manual:
+Since the internal ADC of the ESP32 did not work with the sensor, this code uses an ADS1115 connected to SDA 21, SCL 22.
+
+From the dust sensor manual:
 
 It is applied to detect of dust in the air, such as the applications of Air Purifier, Air Monitor and PM2.5 Detector.
 
@@ -39,3 +40,5 @@ So we need to change it to:
 
 * analogSetAttenuation(ADC_0db)
 * analogReadResolution(10)
+
+WE DON'T USE THE INTERNAL ADC ANYMORE, but added an external ADS1115
