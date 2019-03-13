@@ -1,3 +1,7 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+
 #include <Wire.h>
 #include "SSD1306Wire.h"
 
@@ -5,11 +9,12 @@
 #include <DHT.h>
 #include <DHT_U.h>
 
-#include <WiFi.h>
-#include <PubSubClient.h>
+#include <Adafruit_ADS1015.h>
 
 #define DHTPIN 18
 #define DHTTYPE    DHT22     // DHT 22 (AM2302)
+
+#define USE_MQTT 1
 
 DHT_Unified dht(DHTPIN, DHTTYPE);
 
@@ -18,21 +23,27 @@ uint32_t delayMS;
 //The BOOT button is connected to gpio 0.
 #define BUTTON_PIN 0
 
+//blue onboard LED
+#define LED_PIN 16
+
 #define OLED_ADDRESS 0x3C
-#define OLED_SDA 5
-#define OLED_SCL 4
+#define OLED_SDA 21 //5
+#define OLED_SCL 22 //4
 
 SSD1306Wire display(OLED_ADDRESS, OLED_SDA, OLED_SCL);
 
 
+Adafruit_ADS1115 ads1115(0x48);
 
-
-// Update these with values suitable for your network.
 
 const char* ssid = "<YOUR_SSID>";
 const char* password = "<YOUR_WIFI_PASSWORD>";
-const char* mqtt_server = "<IP_OF_YOUR_MQTT_BROKER>";
 
+const char* mqtt_server = "mqtt.tingg.io";
+
+const char* thing_id = "<YOUR-TINGG-THINGID>";
+const char*  key = "<YOUR-TINGG-THINGKEY>";
+const char* username = "thing";
 
 
 //DUST SENSOR stuff
@@ -40,21 +51,101 @@ const char* mqtt_server = "<IP_OF_YOUR_MQTT_BROKER>";
 #define        NO_DUST_VOLTAGE                 0            //mv 400
 #define        SYS_VOLTAGE                     1000
 
-/*
-I/O define
-*/
 const int iled = 23;                                            //drive the led of sensor
 const int vout = 34;                                            //analog input pin
 
-/*
-variable
-*/
+
 float density, voltage;
 int   adcvalue;
 
-/*
-private function
-*/
+// Pins Config
+const int LightPin = 16;
+const int ButtonPin = 0;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+
+// Vars
+int val;
+char buf[12];
+long lastMsg = 0;
+char msg[50];
+int value = 0;
+
+void setup_wifi() {
+
+  delay(10);
+
+  if(USE_MQTT==1)
+  {
+    // We start by connecting to a WiFi network
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+
+    WiFi.mode(WIFI_STA);
+
+    WiFi.begin(ssid, password);
+
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+      Serial.println("");
+      Serial.println("WiFi connected");
+      Serial.println("IP address: ");
+      Serial.println(WiFi.localIP());
+
+      display.drawString(10, 50, String("IP: "));
+      display.drawString(60, 50, String(WiFi.localIP()));
+  }
+  randomSeed(micros());
+
+}
+
+
+void reconnect() {
+  if(USE_MQTT!=1)
+  {
+    return;
+  }
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    if (client.connect(thing_id, username, key)) {
+      Serial.println("connected");
+      //client.subscribe(subTopic);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+
+String message(byte* payload, unsigned int length) {
+  payload[length] = '\0';
+  String s = String((char*)payload);
+  return s;
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.println(topic);
+  String msg = message(payload, length);
+
+  if (msg == "ON") {
+    digitalWrite(LightPin,LOW);
+  }
+  else {
+    digitalWrite(LightPin,HIGH);
+  }
+}
+
+
+
 int Filter(int m)
 {
   static int flag_first = 0, _buff[10], sum;
@@ -88,100 +179,15 @@ int Filter(int m)
 }
 
 
-//MQTT STUFF
-
-WiFiClient espClient;
-PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[50];
-int value = 0;
-
-void setup_wifi() {
-
-  delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
-  WiFi.begin(ssid, password);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  randomSeed(micros());
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
-  display.drawString(10, 50, String("IP: "));
-  display.drawString(60, 50, String(WiFi.localIP()));
-
-}
-
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println();
-
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    //digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on
-
-  } else {
-    //digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off
-  }
-
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Create a random client ID
-    String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
-    // Attempt to connect
-    if (client.connect(clientId.c_str())) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("outTopic", "hello world");
-      // ... and resubscribe
-      client.subscribe("inTopic");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
-}
-
-
-
 void setup() {
   Serial.begin(115200);
   // Initialize device.
   dht.begin();
 
   pinMode(iled, OUTPUT);
-  digitalWrite(iled, LOW);                                     //iled default closed
+  digitalWrite(iled, LOW);
 
-
-
-	analogReadResolution(10);
-	analogSetAttenuation(ADC_0db);
-
-
+  Wire.begin(OLED_SDA, OLED_SCL);
 
   // Initialising the UI will init the display too.
   display.init();
@@ -190,16 +196,22 @@ void setup() {
 
   Serial.println(F("esp32 Weather Station"));
 
-
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.drawString(10, 10, String("esp32 Weather Station"));
-  display.drawString(10, 20, String("connecting wifi..."));
-  display.display();
 
-  setup_wifi();
-  client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
+
+  ads1115.setGain(GAIN_FOUR);    // 4x gain   +/- 1.024V  1 bit = 0.5mV
+  //ads1115.begin();
+
+  if(USE_MQTT==1)
+  {
+    display.drawString(10, 20, String("connecting wifi..."));
+    display.display();
+    setup_wifi();
+    client.setServer(mqtt_server, 1883);
+    client.setCallback(callback);
+  }
 
   // Print temperature sensor details.
   sensor_t sensor;
@@ -229,26 +241,27 @@ void setup() {
 
 void readDustSensor(void)
 {
-  /*
-  get adcvalue
-  */
   digitalWrite(iled, HIGH);
   delayMicroseconds(280);
 
-  adcvalue = analogRead(vout);
+  //get adcvalue
+  int16_t adc0;//1 bit is 0.5mV
+  adc0 = ads1115.readADC_SingleEnded(0);
   digitalWrite(iled, LOW);
+
+  Serial.print("adc0: ");
+  Serial.println(adc0);
+
 
   //adcvalue = Filter(adcvalue);
 
-  /*
-  covert voltage (mv)
-  */
-  voltage = (SYS_VOLTAGE / 1024.0) * adcvalue *11;
+  //convert adc value to voltage [mV]
+  voltage = adc0 *0.5;
 
+  Serial.print("voltage: ");
+  Serial.println(voltage,DEC);
 
-  /*
-  voltage to density
-  */
+  //voltage to density
   if(voltage >= NO_DUST_VOLTAGE)
   {
     voltage -= NO_DUST_VOLTAGE;
@@ -256,24 +269,24 @@ void readDustSensor(void)
     density = voltage * COV_RATIO;
   }
   else
+  {
     density = 0;
+  }
 
-  /*
-  display the result
-  */
+  //display the result
   Serial.print("The current dust concentration is: ");
   Serial.print(density);
   Serial.print(" ug/m3\n");
-
-
 }
 
 void loop() {
-  if (!client.connected()) {
-  reconnect();
-}
-client.loop();
-
+  if(USE_MQTT)
+  {
+    if (!client.connected()) {
+      reconnect();
+    }
+    client.loop();
+  }
 
 
   // Delay between measurements.
@@ -289,10 +302,6 @@ client.loop();
   readDustSensor();
 
   String str_density = String(density);
-
-
-
-
 
   display.clear();
   // Get temperature event and print its value.
@@ -310,11 +319,14 @@ client.loop();
     display.drawString(10, 10, String("Temp: "));
     display.drawString(60, 10, str_temperature);
 
-    //publish to mqtt
-    str_temperature.toCharArray(msg, 50);
-    Serial.print("Publish temperature message: ");
-    Serial.println(msg);
-    client.publish("temperature", msg);
+    if(USE_MQTT==1)
+    {
+      //publish to mqtt
+      str_temperature.toCharArray(msg, 50);
+      Serial.print("Publish temperature message: ");
+      Serial.println(msg);
+      client.publish("temperature", msg);
+    }
 
   }
   // Get humidity event and print its value.
@@ -331,29 +343,29 @@ client.loop();
     display.drawString(10, 20, String("Humidity: "));
     display.drawString(60, 20, str_humidity);
     //publish to mqtt
-    str_humidity.toCharArray(msg, 50);
-    Serial.print("Publish humidity message: ");
-    Serial.println(msg);
-    client.publish("humidity", msg);
+    if(USE_MQTT==1)
+    {
+      str_humidity.toCharArray(msg, 50);
+      Serial.print("Publish humidity message: ");
+      Serial.println(msg);
+      client.publish("humidity", msg);
+    }
   }
 
   display.drawString(10, 30, String("Dust: "));
   display.drawString(60, 30, String(density));
 
-  display.drawString(10, 40, String("Voltage: "));
+  display.drawString(10, 40, String("Voltage[mV]: "));
   display.drawString(60, 40, String(voltage));
-
-  //display.drawString(10, 50, String("Hall: "));
-  //display.drawString(60, 50, String(hallRead()));
 
   display.display();
 
-  //publish to mqtt
-  str_density.toCharArray(msg, 50);
-  Serial.print("Publish dust message: ");
-  Serial.println(msg);
-  client.publish("dust", msg);
-
-
-
+  if(USE_MQTT==1)
+  {
+    //publish to mqtt
+    str_density.toCharArray(msg, 50);
+    Serial.print("Publish dust density message: ");
+    Serial.println(msg);
+    client.publish("density", msg);
+  }
 }
